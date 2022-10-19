@@ -1,6 +1,8 @@
 package main
 
 import (
+	// "encoding/json"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/jayakrishnan-jayu/bin-go/bingo"
 )
 
 var serverIp = flag.String("i", "localhost", "Ip Address of Server")
@@ -40,26 +43,26 @@ func main() {
 		for {
 			_, message, err := c.ReadMessage()
 			if err != nil {
-				log.Println("read:", err)
-				return
+					log.Println("readMessage()", err)
+					break
+				}
+			var client[] bingo.Client
+				
+			err = json.Unmarshal(message, &client)
+			
+			if err != nil {
+				log.Println("readjson()", err)
+				break
 			}
-			log.Printf("recv: %s", message)
+			fmt.Println("Client:", client)
 		}
 	}()
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
 
 	for {
 		select {
 		case <-done:
 			return
-		case t := <-ticker.C:
-			err := c.WriteMessage(websocket.TextMessage, []byte(t.String()))
-			if err != nil {
-				log.Println("write:", err)
-				return
-			}
 		case <-interrupt:
 			log.Println("interrupt")
 
