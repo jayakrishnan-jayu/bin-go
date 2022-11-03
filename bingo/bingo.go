@@ -1,7 +1,7 @@
 package bingo
 
 import (
-	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -37,8 +37,8 @@ type Client struct {
 	Name string          `json:"name"`
 	Ip   net.IP          `json:"ip"`
 	Conn *websocket.Conn `json:"-"`
-	game *Game
-	Send chan []byte
+	game *Game           `json:"-"`
+	Send chan []byte     `json:"-"`
 }
 
 func (client *Client) String() string {
@@ -99,6 +99,7 @@ func (c *Client) readPump() {
 	})
 	for {
 		_, message, err := c.Conn.ReadMessage()
+		fmt.Println(string(message))
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
@@ -107,8 +108,34 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.game.broadcast <- message
+		var messageMap map[string]interface{}
+		err = json.Unmarshal(message, &messageMap)
+		if err != nil {
+			log.Printf("json: %v", err)
+		}
+
+		cmd, ok := messageMap["command"].(float64)
+		if !ok {
+			log.Println("Command not found")
+			break
+		}
+		c.handleResponse(int(cmd), message)
+		// c.game.receive <- messageMap
+	}
+}
+
+func (c *Client) handleResponse(cmd int, message []byte) {
+	switch cmd {
+	case PlayerNameCommand:
+		var playerUserName PlayerName
+		err := json.Unmarshal(message, &playerUserName)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+
+		c.Name = playerUserName.Name
+		c.game.broadcastPlayerlist()
 	}
 }
 
@@ -121,6 +148,9 @@ type Game struct {
 
 	// Inbound messages from the clients.
 	broadcast chan []byte
+
+	// Inbound messages from the clients.
+	receive chan map[string]interface{}
 
 	// Register requests from the clients.
 	register chan *Client
@@ -150,8 +180,8 @@ func (game *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	game.playerIndex += 1
 	client := &Client{
-		Id:   game.playerIndex,
-		Name: fmt.Sprintf("Player_%d", game.playerIndex),
+		Id: game.playerIndex,
+		// Name: fmt.Sprintf("Player_%d", game.playerIndex),
 		Ip:   ipnet.IP,
 		Conn: c,
 		game: game,
@@ -163,15 +193,47 @@ func (game *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	go client.writePump()
 	go client.readPump()
+
+	// for client.Name == "" {
+	cmd := RequestCommand{Command: PlayerNameCommand}
+	output, err := json.Marshal(cmd)
+	if err != nil {
+		log.Println(err)
+		// continue
+
+	}
+	fmt.Println("Sending Command", string(output))
+	client.Send <- output
+	// 	// time.Sleep(2 * time.Second)
+	// 	break
+	// }
 }
 
-// func (c *Client) handlePlayerDelete() {
-// }
+func (g *Game) broadcastPlayerlist() {
+	clients := make([]*Client, 0, len(g.clients))
+	for c2 := range g.clients {
+		clients = append(clients, c2)
+	}
+
+	pList := PlayersList{
+		Command: PlayersListCommand,
+		Players: clients,
+	}
+
+	output, err := json.Marshal(pList)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	fmt.Println("Sending", string(output))
+	g.broadcast <- output
+}
 
 func New(serverIp net.IP) *Game {
 	game := &Game{
 		IsLobbyMode: true,
 		broadcast:   make(chan []byte),
+		receive:     make(chan map[string]interface{}),
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
 		clients:     make(map[*Client]bool),
@@ -189,6 +251,10 @@ func (g *Game) Run() {
 				close(client.Send)
 				delete(g.clients, client)
 			}
+			g.broadcastPlayerlist()
+		case message := <-g.receive:
+			fmt.Println(message)
+
 		case message := <-g.broadcast:
 			for client := range g.clients {
 				select {

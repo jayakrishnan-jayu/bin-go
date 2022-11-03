@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -16,7 +17,7 @@ import (
 
 var serverIp = flag.String("i", "localhost", "Ip Address of Server")
 var port = flag.Int("p", 8080, "Port address of the server")
-var username = flag.String("n", "user", "Username for game session")
+var username = flag.String("u", "user", "Username for game session")
 
 const (
 	// Time allowed to write a message to the peer.
@@ -48,6 +49,7 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.Send:
+			fmt.Println("Sending", string(message))
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel.
@@ -101,7 +103,60 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		fmt.Printf("Server: %s", message)
+		var messageMap map[string]interface{}
+		if err := json.Unmarshal(message, &messageMap); err != nil {
+			log.Println(err)
+			return
+		}
+		fmt.Printf("Server: %s\n", message)
+
+		val, err := parseCommandMessage(messageMap)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		c.handleServerCommand(val, message)
+		// 	break
+		// } else {
+		// 	c.handleServerCommand(val, messageMap)
+		// }
+	}
+}
+
+func parseCommandMessage(messageMap map[string]interface{}) (int, error) {
+
+	if cmd, ok := messageMap["command"].(float64); ok {
+		return int(cmd), nil
+	}
+	// return -1, fmt.Errorf("Invalid command")
+
+	return -1, fmt.Errorf("Command not found")
+
+}
+
+func (c *Client) handleServerCommand(cmd int, message []byte) {
+	fmt.Println("handle Server command")
+	switch cmd {
+	case bingo.PlayerNameCommand:
+		output, err := json.Marshal(bingo.PlayerName{
+			Command: bingo.PlayerNameCommand,
+			Name:    *username,
+		})
+		if err != nil {
+			log.Println(err)
+			break
+		}
+
+		c.Send <- output
+
+	case bingo.PlayersListCommand:
+		var playersList bingo.PlayersList
+		err := json.Unmarshal(message, &playersList)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+		fmt.Println(playersList)
 	}
 }
 
