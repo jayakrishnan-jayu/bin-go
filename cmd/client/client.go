@@ -13,35 +13,17 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/jayakrishnan-jayu/bin-go/bingo"
+	"github.com/jayakrishnan-jayu/bin-go/utils"
 )
 
 var serverIp = flag.String("i", "localhost", "Ip Address of Server")
 var port = flag.Int("p", 8080, "Port address of the server")
 var username = flag.String("u", "user", "Username for game session")
 
-const (
-	// Time allowed to write a message to the peer.
-	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer.
-	pongWait = 10 * time.Second
-
-	// Send pings to peer with this period. Must be less than pongWait.
-	pingPeriod = (pongWait * 8) / 10
-
-	// Maximum message size allowed from peer.
-	maxMessageSize = 512
-)
-
-var (
-	newline = []byte{'\n'}
-	space   = []byte{' '}
-)
-
 type Client bingo.Client
 
 func (c *Client) writePump() {
-	ticker := time.NewTicker(pingPeriod)
+	ticker := time.NewTicker(utils.PingPeriod)
 	defer func() {
 		ticker.Stop()
 		c.Conn.Close()
@@ -50,7 +32,7 @@ func (c *Client) writePump() {
 		select {
 		case message, ok := <-c.Send:
 			fmt.Println("Sending", string(message))
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			c.Conn.SetWriteDeadline(time.Now().Add(utils.WriteWait))
 			if !ok {
 				// The hub closed the channel.
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -66,7 +48,7 @@ func (c *Client) writePump() {
 			// Add queued chat messages to the current websocket message.
 			n := len(c.Send)
 			for i := 0; i < n; i++ {
-				w.Write(newline)
+				w.Write(utils.Newline)
 				w.Write(<-c.Send)
 			}
 
@@ -74,7 +56,7 @@ func (c *Client) writePump() {
 				return
 			}
 		case <-ticker.C:
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			c.Conn.SetWriteDeadline(time.Now().Add(utils.WriteWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -86,14 +68,15 @@ func (c *Client) readPump() {
 	defer func() {
 		c.Conn.Close()
 	}()
-	c.Conn.SetReadLimit(maxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.Conn.SetReadLimit(utils.MaxMessageSize)
+	c.Conn.SetReadDeadline(time.Now().Add(utils.PongWait))
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(pongWait))
+		c.Conn.SetReadDeadline(time.Now().Add(utils.PongWait))
 		return nil
 	})
 	for {
 		_, message, err := c.Conn.ReadMessage()
+		fmt.Println("got message", string(message))
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
@@ -102,7 +85,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
+		message = bytes.TrimSpace(bytes.Replace(message, utils.Newline, utils.Space, -1))
 		var messageMap map[string]interface{}
 		if err := json.Unmarshal(message, &messageMap); err != nil {
 			log.Println(err)
@@ -116,10 +99,6 @@ func (c *Client) readPump() {
 			return
 		}
 		c.handleServerCommand(val, message)
-		// 	break
-		// } else {
-		// 	c.handleServerCommand(val, messageMap)
-		// }
 	}
 }
 
@@ -135,7 +114,7 @@ func parseCommandMessage(messageMap map[string]interface{}) (int, error) {
 }
 
 func (c *Client) handleServerCommand(cmd int, message []byte) {
-	fmt.Println("handle Server command")
+	fmt.Println("handle Server command", cmd)
 	switch cmd {
 	case bingo.PlayerNameCommand:
 		output, err := json.Marshal(bingo.PlayerName{
@@ -156,7 +135,7 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 			log.Println(err)
 			break
 		}
-		fmt.Println(playersList)
+		fmt.Println("Players List", playersList)
 	}
 }
 

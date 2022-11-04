@@ -17,5 +17,5 @@ type PlayerName struct {
 
 type PlayersList struct {
 	Command int       `json:"command"`
-	Players []*Client `json:"name"`
+	Players []*Client `json:"players"`
 }
