@@ -76,7 +76,6 @@ func (g *Game) broadcastPlayerlist() {
 	for c2 := range g.clients {
 		clients = append(clients, c2)
 	}
-	fmt.Println("Forwarding to ", clients)
 	pList := PlayersList{
 		Command: PlayersListCommand,
 		Players: clients,
@@ -111,15 +110,20 @@ func (g *Game) Run() {
 			g.clients[client] = true
 			fmt.Println("regiseterd new user")
 		case client := <-g.unregister:
-			fmt.Println("unregistering user", client.Name)
-			if _, ok := g.clients[client]; ok {
-				close(client.Send)
-				delete(g.clients, client)
-			}
-			fmt.Println("CLient length ", len(g.clients))
-			if len(g.clients) > 0 {
-
-				g.broadcastPlayerlist()
+			for {
+				if _, ok := g.clients[client]; ok {
+					close(client.Send)
+					client.Conn.Close()
+					delete(g.clients, client)
+				}
+				if len(g.unregister) > 0 {
+					client = <-g.unregister
+					continue
+				}
+				if len(g.clients) > 0 {
+					go g.broadcastPlayerlist()
+				}
+				break
 			}
 		case message := <-g.receive:
 			fmt.Println(message)

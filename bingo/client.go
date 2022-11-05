@@ -92,7 +92,6 @@ func (c *Client) writePump() {
 }
 
 func (c *Client) readPump() {
-	fmt.Println("read pumb")
 	defer func() {
 		c.game.unregister <- c
 		c.Conn.Close()
@@ -126,7 +125,6 @@ func (c *Client) handlePlayerResponse(cmd int, message []byte) {
 			log.Println(err)
 			break
 		}
-
 		c.Name = playerUserName.Name
 		c.game.broadcastPlayerlist()
 	}
