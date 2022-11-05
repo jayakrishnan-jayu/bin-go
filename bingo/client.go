@@ -1,6 +1,7 @@
 package bingo
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -33,17 +34,18 @@ func (c *Client) SetSocketReadConfig() {
 	})
 }
 
-func (c *Client) ReadMessage() ([]byte, bool) {
+func (c *Client) ReadMessages() ([][]byte, bool) {
 	_, message, err := c.Conn.ReadMessage()
 	if err != nil {
 		if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-			log.Printf("error: %v", err)
+			// log.Printf("error: %v", err)
 		} else {
-			log.Printf("closed: %v", err)
+			// log.Printf("closed: %v", err)
 		}
 		return nil, false
 	}
-	return message, true
+	messages := bytes.Split(message, utils.Newline)
+	return messages, true
 }
 
 func (c *Client) HandleSocketPing() error {
@@ -55,7 +57,6 @@ func (c *Client) HandleSocketPing() error {
 }
 
 func (c *Client) writePump() {
-	fmt.Println("write pumb")
 	ticker := time.NewTicker(utils.PingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -99,20 +100,22 @@ func (c *Client) readPump() {
 	c.SetSocketReadConfig()
 	for {
 		var messageMap map[string]interface{}
-		message, ok := c.ReadMessage()
+		messages, ok := c.ReadMessages()
 		if !ok {
 			break
 		}
-		err := json.Unmarshal(message, &messageMap)
-		if err != nil {
-			log.Printf("json: %v", err)
-			break
+		for _, message := range messages {
+			err := json.Unmarshal(message, &messageMap)
+			if err != nil {
+				log.Fatalf("json: %v", err)
+				break
+			}
+			cmd, ok := utils.GetCommandFromMap(messageMap)
+			if !ok {
+				break
+			}
+			c.handlePlayerResponse(cmd, message)
 		}
-		cmd, ok := utils.GetCommandFromMap(messageMap)
-		if !ok {
-			break
-		}
-		c.handlePlayerResponse(cmd, message)
 	}
 }
 

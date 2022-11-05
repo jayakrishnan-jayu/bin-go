@@ -2,7 +2,6 @@ package bingo
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -14,6 +13,7 @@ var upgrader = websocket.Upgrader{}
 
 type Game struct {
 	IsLobbyMode bool
+	BoardSize   int
 	playerIndex int
 	// Registered clients.
 	clients map[*Client]bool
@@ -32,7 +32,7 @@ type Game struct {
 }
 
 func (game *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("new Connection")
+	// fmt.Println("new Connection")
 	if !game.IsLobbyMode {
 		http.Error(w, "This Server is not accepting anymore players", http.StatusForbidden)
 		return
@@ -40,12 +40,12 @@ func (game *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("ServeHTTP: ", err)
 	}
 
 	ipnet, ok := c.LocalAddr().(*net.TCPAddr)
 	if !ok {
-		log.Fatal(fmt.Errorf("Could not find IP"))
+		log.Fatal("ServeHTTP: Could not find IP")
 	}
 	game.playerIndex += 1
 	client := &Client{
@@ -55,44 +55,48 @@ func (game *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		game: game,
 		Send: make(chan []byte, 256),
 	}
-	fmt.Println("new user")
+	// fmt.Println("new user")
 
 	game.register <- client
 
 	go client.writePump()
 	go client.readPump()
 
-	cmd := RequestCommand{Command: PlayerNameCommand}
-	output, err := json.Marshal(cmd)
-	if err != nil {
-		log.Println(err)
-	}
-	fmt.Println("Sending Command", string(output))
-	client.Send <- output
+	client.requestClientName()
+	client.sendGameConfig()
 }
 
 func (g *Game) broadcastPlayerlist() {
-	clients := make([]*Client, 0, len(g.clients))
-	for c2 := range g.clients {
-		clients = append(clients, c2)
-	}
-	pList := PlayersList{
-		Command: PlayersListCommand,
-		Players: clients,
-	}
-
-	output, err := json.Marshal(pList)
+	output, err := json.Marshal(g.playerList())
 	if err != nil {
-		log.Println(err)
+		log.Fatal("broadcastPlayerlist: ", err)
 		return
 	}
-	fmt.Println("Sending", string(output))
 	g.broadcast <- output
+}
+
+func (c *Client) requestClientName() {
+	cmd := RequestCommand{Command: PlayerNameCommand}
+	output, err := json.Marshal(cmd)
+	if err != nil {
+		log.Fatal("requestClientName: ", err)
+	}
+	c.Send <- output
+}
+
+func (c *Client) sendGameConfig() {
+	output, err := json.Marshal(c.game.gameConfig())
+	if err != nil {
+		log.Fatal("sendGameConfig:", err)
+		return
+	}
+	c.Send <- output
 }
 
 func New(serverIp net.IP) *Game {
 	game := &Game{
 		IsLobbyMode: true,
+		BoardSize:   5,
 		broadcast:   make(chan []byte),
 		receive:     make(chan map[string]interface{}),
 		register:    make(chan *Client),
@@ -106,9 +110,10 @@ func (g *Game) Run() {
 	for {
 		select {
 		case client := <-g.register:
-			fmt.Println("got user to regiser", client)
+			// fmt.Println("got user to regiser", client)
 			g.clients[client] = true
-			fmt.Println("regiseterd new user")
+			g.playerList().RenderLobby()
+			// fmt.Println("regiseterd new user")
 		case client := <-g.unregister:
 			for {
 				if _, ok := g.clients[client]; ok {
@@ -125,8 +130,10 @@ func (g *Game) Run() {
 				}
 				break
 			}
-		case message := <-g.receive:
-			fmt.Println(message)
+			g.playerList().RenderLobby()
+
+		// case message := <-g.receive:
+		// fmt.Println(message)
 
 		case message := <-g.broadcast:
 			for client := range g.clients {

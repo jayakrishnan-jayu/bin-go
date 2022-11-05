@@ -45,7 +45,7 @@ func GetLocalIP() (string, error) {
 func GetCommandFromMap(messageMap map[string]interface{}) (int, bool) {
 	cmd, ok := messageMap["command"].(float64)
 	if !ok {
-		log.Println("Command not found or Invalid Command in response")
+		log.Fatal("Command not found or Invalid Command in response")
 		return -1, false
 	}
 	return int(cmd), true

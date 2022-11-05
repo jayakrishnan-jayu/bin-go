@@ -21,6 +21,7 @@ var port = flag.Int("p", 8080, "Port address of the server")
 var username = flag.String("u", "user", "Username for game session")
 
 type Client bingo.Client
+type Game bingo.Game
 
 func (c *Client) writePump() {
 	ticker := time.NewTicker(utils.PingPeriod)
@@ -31,7 +32,7 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.Send:
-			fmt.Println("Sending", string(message))
+			// fmt.Println("Sending", string(message))
 			c.Conn.SetWriteDeadline(time.Now().Add(utils.WriteWait))
 			if !ok {
 				// The hub closed the channel.
@@ -75,31 +76,41 @@ func (c *Client) readPump() {
 		return nil
 	})
 	for {
-		_, message, err := c.Conn.ReadMessage()
-		fmt.Println("got message", string(message))
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("error: %v", err)
-			} else {
-				log.Printf("closed: %v", err)
-			}
+		messages, ok := c.ReadMessages()
+		if !ok {
 			break
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, utils.Newline, utils.Space, -1))
-		var messageMap map[string]interface{}
-		if err := json.Unmarshal(message, &messageMap); err != nil {
-			log.Println(err)
-			return
-		}
-		fmt.Printf("Server: %s\n", message)
+		for _, message := range messages {
+			var messageMap map[string]interface{}
+			fmt.Println(message)
+			if err := json.Unmarshal(message, &messageMap); err != nil {
+				log.Fatal("mesage map readPumb: ", err)
+				return
+			}
+			// fmt.Printf("Server: %s\n", message)
 
-		val, err := parseCommandMessage(messageMap)
-		if err != nil {
-			log.Println(err)
-			return
+			val, err := parseCommandMessage(messageMap)
+			if err != nil {
+				log.Fatal("parse command message readPumb: ", err)
+				return
+			}
+			c.handleServerCommand(val, message)
 		}
-		c.handleServerCommand(val, message)
 	}
+}
+
+func (c *Client) ReadMessages() ([][]byte, bool) {
+	_, message, err := c.Conn.ReadMessage()
+	if err != nil {
+		if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			// log.Printf("error: %v", err)
+		} else {
+			// log.Printf("closed: %v", err)
+		}
+		return nil, false
+	}
+	messages := bytes.Split(message, utils.Newline)
+	return messages, true
 }
 
 func parseCommandMessage(messageMap map[string]interface{}) (int, error) {
@@ -114,7 +125,6 @@ func parseCommandMessage(messageMap map[string]interface{}) (int, error) {
 }
 
 func (c *Client) handleServerCommand(cmd int, message []byte) {
-	fmt.Println("handle Server command", cmd)
 	switch cmd {
 	case bingo.PlayerNameCommand:
 		output, err := json.Marshal(bingo.PlayerName{
@@ -122,7 +132,7 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 			Name:    *username,
 		})
 		if err != nil {
-			log.Println(err)
+			log.Fatal("handleServerCommand ", err)
 			break
 		}
 
@@ -132,10 +142,17 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 		var playersList bingo.PlayersList
 		err := json.Unmarshal(message, &playersList)
 		if err != nil {
-			log.Println(err)
+			log.Fatal("handleServerCommand ", err)
 			break
 		}
-		fmt.Println("Players List", playersList)
+		playersList.RenderLobby()
+	case bingo.GameConfigCommand:
+		var gc bingo.GameConfig
+		err := json.Unmarshal(message, &gc)
+		if err != nil {
+			log.Fatal("handleServerCommand ", err)
+			break
+		}
 	}
 }
 
@@ -148,7 +165,7 @@ func main() {
 	signal.Notify(interrupt, os.Interrupt)
 
 	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws"}
-	log.Printf("connecting to %s", u.String())
+	// log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
