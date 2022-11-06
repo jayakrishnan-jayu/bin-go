@@ -13,12 +13,13 @@ import (
 )
 
 type Client struct {
-	Id   int             `json:"id"`
-	Name string          `json:"name"`
-	Ip   net.IP          `json:"ip"`
-	Conn *websocket.Conn `json:"-"`
-	game *Game           `json:"-"`
-	Send chan []byte     `json:"-"`
+	Id    uint8           `json:"id"`
+	Name  string          `json:"name"`
+	Ip    net.IP          `json:"ip"`
+	Conn  *websocket.Conn `json:"-"`
+	game  *Game           `json:"-"`
+	Send  chan []byte     `json:"-"`
+	board *[][]uint8
 }
 
 func (client *Client) String() string {
@@ -130,5 +131,13 @@ func (c *Client) handlePlayerResponse(cmd int, message []byte) {
 		}
 		c.Name = playerUserName.Name
 		c.game.broadcastPlayerlist()
+	case PlayerBoardCommand:
+		var playerBoard PlayersBoard
+		err := json.Unmarshal(message, &playerBoard)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+		c.board = playerBoard.Board
 	}
 }

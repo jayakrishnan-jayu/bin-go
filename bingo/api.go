@@ -5,6 +5,7 @@ const (
 	PlayerNameCommand
 	PlayersListCommand
 	GameConfigCommand
+	PlayerBoardCommand
 )
 
 type RequestCommand struct {
@@ -21,10 +22,14 @@ type PlayersList struct {
 	Players []*Client `json:"players"`
 }
 
+type PlayersBoard struct {
+	Command int        `json:"command"`
+	Board   *[][]uint8 `json:"board"`
+}
 type GameConfig struct {
-	Command     int  `json:"command"`
-	IsLobbyMode bool `json:"is_lobby_mode"`
-	BoardSize   int  `json:"board_size"`
+	Command     int   `json:"command"`
+	IsLobbyMode bool  `json:"is_lobby_mode"`
+	BoardSize   uint8 `json:"board_size"`
 }
 
 func (g *Game) playerList() PlayersList {

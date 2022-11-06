@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/url"
 	"os"
 	"os/signal"
@@ -21,7 +22,14 @@ var port = flag.Int("p", 8080, "Port address of the server")
 var username = flag.String("u", "user", "Username for game session")
 
 type Client bingo.Client
-type Game bingo.Game
+type GameConfig bingo.GameConfig
+
+type Game struct {
+	gameConfig GameConfig
+	board      *[][]uint8
+}
+
+var game Game
 
 func (c *Client) writePump() {
 	ticker := time.NewTicker(utils.PingPeriod)
@@ -82,12 +90,10 @@ func (c *Client) readPump() {
 		}
 		for _, message := range messages {
 			var messageMap map[string]interface{}
-			fmt.Println(message)
 			if err := json.Unmarshal(message, &messageMap); err != nil {
 				log.Fatal("mesage map readPumb: ", err)
 				return
 			}
-			// fmt.Printf("Server: %s\n", message)
 
 			val, err := parseCommandMessage(messageMap)
 			if err != nil {
@@ -124,6 +130,29 @@ func parseCommandMessage(messageMap map[string]interface{}) (int, error) {
 
 }
 
+func (g *Game) generateGameBoard() {
+	rand.Seed(time.Now().UnixNano())
+	addedNumbers := map[uint8]bool{}
+	size := int(g.gameConfig.BoardSize)
+	board := make([][]uint8, size)
+	for i := range board {
+		board[i] = make([]uint8, size)
+		var n uint8
+		for j := range board[i] {
+			for {
+				n = uint8(rand.Intn(size*size) + 1)
+				if addedNumbers[n] {
+					continue
+				}
+				break
+			}
+			addedNumbers[n] = true
+			board[i][j] = n
+		}
+	}
+	g.board = &board
+}
+
 func (c *Client) handleServerCommand(cmd int, message []byte) {
 	switch cmd {
 	case bingo.PlayerNameCommand:
@@ -147,12 +176,29 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 		}
 		playersList.RenderLobby()
 	case bingo.GameConfigCommand:
-		var gc bingo.GameConfig
-		err := json.Unmarshal(message, &gc)
+		err := json.Unmarshal(message, &game.gameConfig)
 		if err != nil {
 			log.Fatal("handleServerCommand ", err)
 			break
 		}
+	case bingo.PlayerBoardCommand:
+		if game.gameConfig == (GameConfig{}) {
+			log.Fatal("handleServerCommand: GameConfig not yet intilzied")
+		}
+		fmt.Println("Board size", game.gameConfig.BoardSize)
+		game.generateGameBoard()
+		fmt.Println("Board size", len(*game.board))
+		fmt.Printf("%v", game.board)
+		output, err := json.Marshal(bingo.PlayersBoard{
+			Command: bingo.PlayerBoardCommand,
+			Board:   game.board,
+		})
+		if err != nil {
+			log.Fatal("handleServerCommand ", err)
+			break
+		}
+
+		c.Send <- output
 	}
 }
 
@@ -160,7 +206,6 @@ func main() {
 	flag.Parse()
 
 	addr := fmt.Sprintf("%s:%d", *serverIp, *port)
-
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 

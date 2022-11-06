@@ -29,10 +29,10 @@ func runCmd(name string, arg ...string) {
 
 func (p PlayersList) RenderLobby() {
 	clearTerminal()
-	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
+	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 1)
 	fmt.Println("Lobby")
 	for _, p := range p.Players {
-		fmt.Fprintf(w, "%d) %s (%s)\n", p.Id, p.Name, p.Ip)
+		fmt.Fprintf(w, "%d)\t%s\t(%s)\n", p.Id, p.Name, p.Ip)
 	}
 	w.Flush()
 }

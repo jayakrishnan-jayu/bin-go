@@ -2,6 +2,7 @@ package bingo
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -13,8 +14,8 @@ var upgrader = websocket.Upgrader{}
 
 type Game struct {
 	IsLobbyMode bool
-	BoardSize   int
-	playerIndex int
+	BoardSize   uint8
+	playerIndex uint8
 	// Registered clients.
 	clients map[*Client]bool
 
@@ -29,6 +30,9 @@ type Game struct {
 
 	// Unregister requests from clients.
 	unregister chan *Client
+
+	// Input from Host
+	input chan string
 }
 
 func (game *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +68,7 @@ func (game *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	client.requestClientName()
 	client.sendGameConfig()
+	client.requestGeneratedBoard()
 }
 
 func (g *Game) broadcastPlayerlist() {
@@ -80,6 +85,15 @@ func (c *Client) requestClientName() {
 	output, err := json.Marshal(cmd)
 	if err != nil {
 		log.Fatal("requestClientName: ", err)
+	}
+	c.Send <- output
+}
+
+func (c *Client) requestGeneratedBoard() {
+	cmd := RequestCommand{Command: PlayerBoardCommand}
+	output, err := json.Marshal(cmd)
+	if err != nil {
+		log.Fatal("requestGenerateBoard: ", err)
 	}
 	c.Send <- output
 }
@@ -102,17 +116,28 @@ func New(serverIp net.IP) *Game {
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
 		clients:     make(map[*Client]bool),
+		input:       make(chan string),
 	}
 	return game
 }
+func (g *Game) readInput() {
+
+	for {
+		var u string
+		fmt.Scanf("%s\n", &u)
+		g.input <- u
+	}
+}
 
 func (g *Game) Run() {
+	go g.readInput()
 	for {
 		select {
 		case client := <-g.register:
 			// fmt.Println("got user to regiser", client)
 			g.clients[client] = true
 			g.playerList().RenderLobby()
+			fmt.Println("Enter s to start game")
 			// fmt.Println("regiseterd new user")
 		case client := <-g.unregister:
 			for {
@@ -131,6 +156,7 @@ func (g *Game) Run() {
 				break
 			}
 			g.playerList().RenderLobby()
+			fmt.Println("Enter s to start game")
 
 		// case message := <-g.receive:
 		// fmt.Println(message)
@@ -143,6 +169,12 @@ func (g *Game) Run() {
 					close(client.Send)
 					delete(g.clients, client)
 				}
+			}
+		case cmd := <-g.input:
+			switch cmd {
+			case "s":
+				g.IsLobbyMode = !g.IsLobbyMode
+				fmt.Println("Lobby mode: ", g.IsLobbyMode)
 			}
 		}
 	}
