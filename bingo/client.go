@@ -139,5 +139,14 @@ func (c *Client) handlePlayerResponse(cmd int, message []byte) {
 			break
 		}
 		c.board = playerBoard.Board
+	case GameMoveCommand:
+		var gameMove GameMove
+		err := json.Unmarshal(message, &gameMove)
+		if err != nil {
+			log.Println(err)
+			break
+		}
+		gameMove.Author = c
+		c.game.receive <- gameMove
 	}
 }

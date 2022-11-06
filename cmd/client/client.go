@@ -27,6 +27,7 @@ type GameConfig bingo.GameConfig
 type Game struct {
 	gameConfig GameConfig
 	board      *[][]uint8
+	started    bool
 }
 
 var game Game
@@ -166,7 +167,14 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 		}
 
 		c.Send <- output
-
+	case bingo.PlayerIDCommand:
+		var playerId bingo.PlayerID
+		err := json.Unmarshal(message, &playerId)
+		if err != nil {
+			log.Fatal("handleServerCommand ", err)
+			break
+		}
+		c.Id = playerId.ID
 	case bingo.PlayersListCommand:
 		var playersList bingo.PlayersList
 		err := json.Unmarshal(message, &playersList)
@@ -199,6 +207,42 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 		}
 
 		c.Send <- output
+	case bingo.GameStatusCommand:
+		bingo.ClearTerminal()
+		var gameStatus bingo.GameStatus
+		err := json.Unmarshal(message, &gameStatus)
+		if err != nil {
+			log.Fatal("handleServerCommand ", err)
+			break
+		}
+		fmt.Println("Current Player: ", gameStatus.PlayerId)
+		if gameStatus.PlayerId == c.Id {
+			go func() {
+
+				fmt.Println("Enter Input ")
+				var digit int
+				fmt.Scanf("%d", &digit)
+				output, err := json.Marshal(bingo.GameMove{
+					Command: bingo.GameMoveCommand,
+					Change:  uint8(digit),
+				})
+				if err != nil {
+					log.Fatal("handleServerCommand ", err)
+				}
+				c.Send <- output
+			}()
+
+		}
+	case bingo.GameMoveCommand:
+		var gameMove bingo.GameMove
+		err := json.Unmarshal(message, &gameMove)
+		if err != nil {
+			log.Fatal("handleServerCommand ", err)
+			break
+		}
+
+		fmt.Println("Current Player: ", gameMove.Change)
+
 	}
 }
 

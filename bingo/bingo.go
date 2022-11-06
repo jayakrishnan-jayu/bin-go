@@ -23,7 +23,7 @@ type Game struct {
 	broadcast chan []byte
 
 	// Inbound messages from the clients.
-	receive chan map[string]interface{}
+	receive chan GameMove
 
 	// Register requests from the clients.
 	register chan *Client
@@ -66,7 +66,8 @@ func (game *Game) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go client.writePump()
 	go client.readPump()
 
-	client.requestClientName()
+	client.requestPlayerName()
+	client.sendPlayerID()
 	client.sendGameConfig()
 	client.requestGeneratedBoard()
 }
@@ -80,11 +81,35 @@ func (g *Game) broadcastPlayerlist() {
 	g.broadcast <- output
 }
 
-func (c *Client) requestClientName() {
+func (g *Game) sendGameStatus(playerId uint8) {
+	cmd := GameStatus{
+		Command:  GameStatusCommand,
+		PlayerId: playerId,
+	}
+	output, err := json.Marshal(cmd)
+	if err != nil {
+		log.Fatal("requestClientName: ", err)
+	}
+	g.broadcast <- output
+}
+
+func (c *Client) requestPlayerName() {
 	cmd := RequestCommand{Command: PlayerNameCommand}
 	output, err := json.Marshal(cmd)
 	if err != nil {
 		log.Fatal("requestClientName: ", err)
+	}
+	c.Send <- output
+}
+
+func (c *Client) sendPlayerID() {
+	cmd := PlayerID{
+		Command: PlayerIDCommand,
+		ID:      c.Id,
+	}
+	output, err := json.Marshal(cmd)
+	if err != nil {
+		log.Fatal("requestGenerateBoard: ", err)
 	}
 	c.Send <- output
 }
@@ -112,7 +137,7 @@ func New(serverIp net.IP) *Game {
 		IsLobbyMode: true,
 		BoardSize:   5,
 		broadcast:   make(chan []byte),
-		receive:     make(chan map[string]interface{}),
+		receive:     make(chan GameMove),
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
 		clients:     make(map[*Client]bool),
@@ -129,12 +154,32 @@ func (g *Game) readInput() {
 	}
 }
 
+func (g *Game) play() {
+	ClearTerminal()
+	clients := make([]*Client, 0, len(g.clients))
+	for c := range g.clients {
+		clients = append(clients, c)
+	}
+	for {
+		for _, c := range clients {
+			if _, ok := g.clients[c]; ok {
+				g.sendGameStatus(c.Id)
+				gameMove := <-g.receive
+				if gameMove.Author != c {
+					log.Fatal("play: gameMove author assertion failed")
+				}
+				fmt.Printf("%s update: %d\n", gameMove.Author.Name, gameMove.Change)
+			}
+		}
+	}
+}
+
 func (g *Game) Run() {
 	go g.readInput()
 	for {
 		select {
 		case client := <-g.register:
-			// fmt.Println("got user to regiser", client)
+			fmt.Println("got user to regiser", client)
 			g.clients[client] = true
 			g.playerList().RenderLobby()
 			fmt.Println("Enter s to start game")
@@ -173,8 +218,10 @@ func (g *Game) Run() {
 		case cmd := <-g.input:
 			switch cmd {
 			case "s":
-				g.IsLobbyMode = !g.IsLobbyMode
-				fmt.Println("Lobby mode: ", g.IsLobbyMode)
+				if g.IsLobbyMode {
+					g.IsLobbyMode = false
+					go g.play()
+				}
 			}
 		}
 	}

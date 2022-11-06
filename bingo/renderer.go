@@ -8,7 +8,7 @@ import (
 	"text/tabwriter"
 )
 
-func clearTerminal() {
+func ClearTerminal() {
 	switch runtime.GOOS {
 	case "darwin":
 		runCmd("clear")
@@ -28,7 +28,7 @@ func runCmd(name string, arg ...string) {
 }
 
 func (p PlayersList) RenderLobby() {
-	clearTerminal()
+	ClearTerminal()
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 1)
 	fmt.Println("Lobby")
 	for _, p := range p.Players {

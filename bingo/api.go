@@ -3,9 +3,12 @@ package bingo
 const (
 	errorCommand int = iota
 	PlayerNameCommand
+	PlayerIDCommand
 	PlayersListCommand
 	GameConfigCommand
 	PlayerBoardCommand
+	GameStatusCommand
+	GameMoveCommand
 )
 
 type RequestCommand struct {
@@ -15,6 +18,11 @@ type RequestCommand struct {
 type PlayerName struct {
 	Command int    `json:"command"`
 	Name    string `json:"name"`
+}
+
+type PlayerID struct {
+	Command int   `json:"command"`
+	ID      uint8 `json:"id"`
 }
 
 type PlayersList struct {
@@ -30,6 +38,17 @@ type GameConfig struct {
 	Command     int   `json:"command"`
 	IsLobbyMode bool  `json:"is_lobby_mode"`
 	BoardSize   uint8 `json:"board_size"`
+}
+
+type GameStatus struct {
+	Command  int   `json:"command"`
+	PlayerId uint8 `json:"player_id"`
+}
+
+type GameMove struct {
+	Command int     `json:"command"`
+	Change  uint8   `json:"change"`
+	Author  *Client `json:"-"`
 }
 
 func (g *Game) playerList() PlayersList {
