@@ -36,3 +36,16 @@ func (p PlayersList) RenderLobby() {
 	}
 	w.Flush()
 }
+
+func RenderBoard(board [][]uint8) {
+	ClearTerminal()
+	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 1)
+
+	for _, row := range board {
+		for _, col := range row {
+			fmt.Fprintf(w, "%d\t", col)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+	w.Flush()
+}

@@ -216,6 +216,7 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 			break
 		}
 		fmt.Println("Current Player: ", gameStatus.PlayerId)
+		bingo.RenderBoard(*game.board)
 		if gameStatus.PlayerId == c.Id {
 			go func() {
 
