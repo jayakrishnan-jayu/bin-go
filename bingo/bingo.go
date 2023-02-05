@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -16,6 +17,7 @@ type Game struct {
 	IsLobbyMode bool
 	BoardSize   uint8
 	playerIndex uint8
+	lock sync.RWMutex
 	// Registered clients.
 	clients map[*Client]bool
 
@@ -153,7 +155,7 @@ func (c *Client) sendGameScoreIndex() {
 func New(serverIp net.IP) *Game {
 	game := &Game{
 		IsLobbyMode: true,
-		BoardSize:   5,
+		BoardSize:   2,
 		broadcast:   make(chan []byte),
 		receive:     make(chan GameMove),
 		register:    make(chan *Client),
@@ -262,7 +264,9 @@ func (g *Game) play() {
 	}
 	for {
 		for _, c := range clients {
+			g.lock.RLock()
 			if _, ok := g.clients[c]; ok && c.scoreIndex <= 0{
+				defer g.lock.RUnlock()
 				g.sendGameStatus(c.Id)
 				gameMove := <-g.receive
 				if gameMove.Author != c {
@@ -289,6 +293,8 @@ func (g *Game) Run() {
 			// fmt.Println("regiseterd new user")
 		case client := <-g.unregister:
 			for {
+				g.lock.Lock()
+				defer g.lock.Unlock()
 				if _, ok := g.clients[client]; ok {
 					close(client.Send)
 					client.Conn.Close()
