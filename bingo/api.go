@@ -9,6 +9,7 @@ const (
 	PlayerBoardCommand
 	GameStatusCommand
 	GameMoveCommand
+	GameScoreIndexCommand
 )
 
 type RequestCommand struct {
@@ -49,6 +50,11 @@ type GameMove struct {
 	Command int     `json:"command"`
 	Change  uint8   `json:"change"`
 	Author  *Client `json:"-"`
+}
+
+type GameScoreIndex struct {
+	Command int   `json:"command"`
+	Score   uint8 `json:"score"`
 }
 
 func (g *Game) playerList() PlayersList {

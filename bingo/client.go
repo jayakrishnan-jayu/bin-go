@@ -13,13 +13,15 @@ import (
 )
 
 type Client struct {
-	Id    uint8           `json:"id"`
-	Name  string          `json:"name"`
-	Ip    net.IP          `json:"ip"`
-	Conn  *websocket.Conn `json:"-"`
-	game  *Game           `json:"-"`
-	Send  chan []byte     `json:"-"`
-	board *[][]uint8
+	Id         uint8           `json:"id"`
+	Name       string          `json:"name"`
+	Ip         net.IP          `json:"ip"`
+	Conn       *websocket.Conn `json:"-"`
+	game       *Game           `json:"-"`
+	Send       chan []byte     `json:"-"`
+	board      *[][]uint8      `json:"-"`
+	score      uint8           `json:"-"`
+	scoreIndex uint8           `json:"-"`
 }
 
 func (client *Client) String() string {

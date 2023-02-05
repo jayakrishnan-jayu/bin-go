@@ -31,6 +31,8 @@ type Game struct {
 }
 
 var game Game
+var playersList bingo.PlayersList
+var finished bool
 
 func (c *Client) writePump() {
 	ticker := time.NewTicker(utils.PingPeriod)
@@ -176,7 +178,6 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 		}
 		c.Id = playerId.ID
 	case bingo.PlayersListCommand:
-		var playersList bingo.PlayersList
 		err := json.Unmarshal(message, &playersList)
 		if err != nil {
 			log.Fatal("handleServerCommand ", err)
@@ -208,6 +209,9 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 
 		c.Send <- output
 	case bingo.GameStatusCommand:
+		if finished {
+			break
+		}
 		bingo.ClearTerminal()
 		var gameStatus bingo.GameStatus
 		err := json.Unmarshal(message, &gameStatus)
@@ -215,11 +219,10 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 			log.Fatal("handleServerCommand ", err)
 			break
 		}
-		fmt.Println("Current Player: ", gameStatus.PlayerId)
 		bingo.RenderBoard(*game.board)
+		fmt.Println("Current Player: ", gameStatus.PlayerId)
 		if gameStatus.PlayerId == c.Id {
 			go func() {
-
 				fmt.Println("Enter Input ")
 				var digit int
 				fmt.Scanf("%d", &digit)
@@ -232,7 +235,6 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 				}
 				c.Send <- output
 			}()
-
 		}
 	case bingo.GameMoveCommand:
 		var gameMove bingo.GameMove
@@ -243,7 +245,16 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 		}
 
 		fmt.Println("Current Player: ", gameMove.Change)
-
+	case bingo.GameScoreIndexCommand:
+		var scoreIndex bingo.GameScoreIndex
+		err := json.Unmarshal(message, &scoreIndex)
+		if err != nil {
+			log.Fatal("handleServerCommand ", err)
+			break
+		}
+		bingo.ClearTerminal()
+		finished = true
+		fmt.Printf("You won %d/%d", scoreIndex.Score, len(playersList.Players))
 	}
 }
 

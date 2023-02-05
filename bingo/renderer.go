@@ -49,3 +49,15 @@ func RenderBoard(board [][]uint8) {
 	}
 	w.Flush()
 }
+
+func RenderServerBoard(clients *map[*Client]bool) {
+	ClearTerminal()
+	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 1)
+	for c := range *clients {
+		fmt.Fprintf(w, "%s\t%d/%d\n", c.Name, c.score, c.game.BoardSize)
+	}
+	// rows, cols, diags := countFalseRowsColsDiags(*board)
+	// fmt.Fprintf(w, "False Rows: %d, False Columns: %d, False Diagonals: %d\n", 
+	// rows, cols, diags)
+	w.Flush()
+}
