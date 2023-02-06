@@ -49,6 +49,7 @@ type GameStatus struct {
 type GameMove struct {
 	Command int     `json:"command"`
 	Change  uint8   `json:"change"`
+	Name    string  `json:"name"`
 	Author  *Client `json:"-"`
 }
 

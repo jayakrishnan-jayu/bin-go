@@ -91,6 +91,16 @@ func (g *Game) broadcastPlayerlist() {
 	g.broadcast <- output
 }
 
+func (g *Game) broadcastGameMove(move *GameMove) {
+	move.Name = move.Author.Name
+	output, err := json.Marshal(move)
+	if err != nil {
+		log.Fatal("broadcastPlayerlist: ", err)
+		return
+	}
+	g.broadcast <- output
+}
+
 func (g *Game) sendGameStatus(playerId uint8) {
 	cmd := GameStatus{
 		Command:  GameStatusCommand,
@@ -149,7 +159,6 @@ func (c *Client) sendGameScoreIndex() {
 		log.Fatal("requestGenerateBoard: ", err)
 	}
 	c.Send <- output
-
 }
 
 func New(serverIp net.IP) *Game {
@@ -244,7 +253,7 @@ func (g* Game) renderScoreBoard() {
 				scoreIndexChanged = true
 				c.scoreIndex = g.scoreIndex
 				fmt.Printf("Score Index %d\n", c.scoreIndex)
-				go c.sendGameScoreIndex()
+				c.sendGameScoreIndex()
 			}
 		}
 		

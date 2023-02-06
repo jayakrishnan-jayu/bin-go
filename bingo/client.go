@@ -150,5 +150,6 @@ func (c *Client) handlePlayerResponse(cmd int, message []byte) {
 		}
 		gameMove.Author = c
 		c.game.receive <- gameMove
+		c.game.broadcastGameMove(&gameMove)
 	}
 }

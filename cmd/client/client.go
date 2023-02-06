@@ -31,8 +31,12 @@ type Game struct {
 }
 
 var game Game
-var playersList bingo.PlayersList
+var players map[int]string
 var finished bool
+var gameLog *GameLog
+
+var done chan struct{}
+var interrupt chan os.Signal
 
 func (c *Client) writePump() {
 	ticker := time.NewTicker(utils.PingPeriod)
@@ -178,10 +182,17 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 		}
 		c.Id = playerId.ID
 	case bingo.PlayersListCommand:
+		var playersList bingo.PlayersList
 		err := json.Unmarshal(message, &playersList)
 		if err != nil {
 			log.Fatal("handleServerCommand ", err)
 			break
+		}
+		for k := range players {
+			delete(players, k)
+		}
+		for _, c2 := range playersList.Players {
+			players[int(c2.Id)] = c2.Name	
 		}
 		playersList.RenderLobby()
 	case bingo.GameConfigCommand:
@@ -220,10 +231,18 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 			break
 		}
 		bingo.RenderBoard(*game.board)
-		fmt.Println("Current Player: ", gameStatus.PlayerId)
+		fmt.Println()
+		gameLog.print()
+		fmt.Println()
+		p, ok := players[int(gameStatus.PlayerId)]
+		if !ok {
+			panic("player not found from id")
+		}
+		fmt.Println("Current Player: ", p)
+		
 		if gameStatus.PlayerId == c.Id {
 			go func() {
-				fmt.Println("Enter Input ")
+				fmt.Print("Enter Input: ")
 				var digit int
 				fmt.Scanf("%d", &digit)
 				output, err := json.Marshal(bingo.GameMove{
@@ -243,8 +262,7 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 			log.Fatal("handleServerCommand ", err)
 			break
 		}
-
-		fmt.Println("Current Player: ", gameMove.Change)
+		gameLog.Push(fmt.Sprintf("%s\t%d", gameMove.Name, gameMove.Change))
 	case bingo.GameScoreIndexCommand:
 		var scoreIndex bingo.GameScoreIndex
 		err := json.Unmarshal(message, &scoreIndex)
@@ -254,7 +272,8 @@ func (c *Client) handleServerCommand(cmd int, message []byte) {
 		}
 		bingo.ClearTerminal()
 		finished = true
-		fmt.Printf("You won %d/%d", scoreIndex.Score, len(playersList.Players))
+		fmt.Printf("You won %d/%d\n\n", scoreIndex.Score, len(players))
+		c.Conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	}
 }
 
@@ -262,10 +281,12 @@ func main() {
 	flag.Parse()
 
 	addr := fmt.Sprintf("%s:%d", *serverIp, *port)
-	interrupt := make(chan os.Signal, 1)
+	interrupt = make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
+	players = make(map[int]string)
 
 	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws"}
+	gameLog = &GameLog{}
 	// log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -309,4 +330,28 @@ func main() {
 		}
 	}
 
+}
+
+
+type GameLog struct {
+	items [] string
+}
+
+func (q *GameLog) Push(value string) {
+	if len(q.items) == 5 {
+		q.pop()
+	}
+	q.items = append(q.items, value)
+}
+
+func (q *GameLog) pop() string {
+	item := q.items[0]
+	q.items = q.items[1:]
+	return item
+}
+
+func (q *GameLog) print() {
+	for _, gm := range (*q).items {
+		fmt.Println(gm)	
+	}
 }
